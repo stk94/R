@@ -1,0 +1,441 @@
+
+```{r }
+library(car) # To calculate VIF , influence plot
+library(caret) # for elastic regression
+library(ROCR) # For ROC
+library(asbio) # for auc
+library(glmnet) # For elasticnet regression
+
+library(rpart)   # for decision tree modeling
+library(party)          # for visualizing trees
+library(partykit)       # for visualizing trees
+library(ggplot2)        # for graphics
+library(ROCR)           # for graphics
+library(rattle)      		# fancy tree plot
+library(rpart.plot)			# enhanced tree plots
+library(RColorBrewer)		# color selection for fancy tree plot
+library(randomForest)   # for Random Forest
+library(e1071)          # for SVM
+library(neuralnet)      # for Neural Network
+```
+Problem 1
+```{r }
+
+# Here I am creating 3 user defined functions,
+# 1. userfunction : for confusion matrix,D statistic, K-S Chart,Distribution of true positives & true negatives, Lift chart.
+# 2. ROCfunc : For ROC curve
+# 3. Association : Function for Concordant Pairs and AUC.
+#  For all the above mentioned functions input parametrs are true value & predicted probability.
+# I have defined three functions for my convinience, since when I want particular output I can get in less time
+
+
+# 1. userfunction 
+#  User defined function with true value & predicted probabilities as inputs.
+
+userfunction <- function(true,predprob) {  # Defining userdefined function
+  
+  predoutput=as.numeric(predprob>0.5) # Considering 0.5 as threshold to give 1(yes) as output.
+  predVals <-  data.frame(trueVal=true,predoutput,predProb=predprob) # Creating dataframe predvals with true values,predicted probabilities,Predicted output.
+  
+  # 1.confusion Matrix
+  
+  CM <- confusionMatrix(predoutput,true, positive="1" ) #
+  print(CM) # To print confusion matrix
+  
+  # 2.D statistic
+  
+  predvals.1<-predVals[predVals$trueVal==1,] # dataframe having observations where y=yes(1)
+  predvals.0<-predVals[predVals$trueVal==0,] # dataframe having observations where y=no(0)
+  DStat <- mean(predvals.1$predProb) - mean(predvals.0$predProb) # calculating D statistic
+  print(DStat) # print D statistic
+  
+  #3. K-S chart  (Kolmogorov-Smirnov chart) 
+  # measures the degree of separation 
+  # between the positive (y=1) and negative (y=0) distributions
+  
+  predVals$group<-cut(predVals$predProb,seq(1,0,-.1),include.lowest=T)
+  xtab<-table(predVals$group,predVals$trueVal)
+  
+  xtab
+  
+  #make empty dataframe
+  KS<-data.frame(Group=numeric(10),
+                 CumPct0=numeric(10),
+                 CumPct1=numeric(10),
+                 Dif=numeric(10))
+  
+  #fill data frame with information: Group ID, 
+  #Cumulative % of 0's, of 1's and Difference
+  for (i in 1:10) {
+    KS$Group[i]<-i
+    KS$CumPct0[i] <- sum(xtab[1:i,1]) / sum(xtab[,1])
+    KS$CumPct1[i] <- sum(xtab[1:i,2]) / sum(xtab[,2])
+    KS$Dif[i]<-abs(KS$CumPct0[i]-KS$CumPct1[i])
+  }
+  
+  KS  
+  
+  KS[KS$Dif==max(KS$Dif),]
+  
+  maxGroup<-KS[KS$Dif==max(KS$Dif),][1,1]
+  
+  #and the K-S chart
+  ggplot(data=KS)+
+    geom_line(aes(Group,CumPct0),color="blue")+
+    geom_line(aes(Group,CumPct1),color="red")+
+    geom_segment(x=maxGroup,xend=maxGroup,
+                 y=KS$CumPct0[maxGroup],yend=KS$CumPct1[maxGroup])+
+    labs(title = "K-S Chart", x= "Deciles", y = "Cumulative Percent")
+  
+  # 4. Distribution of true positives & true negatives:
+  
+  Goodprediction <-predVals[predVals$trueVal==predVals$predoutput,]  #We get true positives & true negatives only when true value equals to predicted output.
+  plot(Goodprediction$trueVal,Goodprediction$predProb) # Plot of predicted output Vs Predicted probability of true positive & true negative observations.
+  
+  # 5.Lift Chart
+  
+  performance_lift <- performance(predprob,"lift") # lift is used to generate lift chart.
+  plot(performance_lift, avg= "vertical",  
+       spread.estimate="boxplot", 
+       show.spread.at= seq(0.1, 0.9, by=0.1))
+  
+}
+
+```
+
+```{r}
+ #  2. ROCfunc 
+ #  User defined function with true value & predicted probabilities as inputs.
+ # Function for ROC curve
+ 
+  ROCfunc <- function(true,predprob){
+    pred <- prediction(predprob, true)    #ROC curve for training data
+  perf <- performance(pred,"tpr","fpr") 
+  plot(perf,colorize=TRUE, print.cutoffs.at = c(0.25,0.5,0.75)); 
+  abline(0, 1, col="red") 
+  }
+```
+
+```{r}
+# 3.Association function for Concordant Pairs and AUC
+#  User defined function with true value & predicted probabilities as inputs.
+
+  Association <- function(trueVal,predProb)
+  {
+    Con_Dis_Data = cbind(trueVal, predProb) 
+    
+    ones = Con_Dis_Data[Con_Dis_Data[,1] == 1,]
+    zeros = Con_Dis_Data[Con_Dis_Data[,1] == 0,]
+    
+    conc=matrix(0, dim(zeros)[1], dim(ones)[1])   #build a matrix of 0's 
+    disc=matrix(0, dim(zeros)[1], dim(ones)[1])
+    ties=matrix(0, dim(zeros)[1], dim(ones)[1])
+    
+    for (j in 1:dim(zeros)[1])
+    {
+      for (i in 1:dim(ones)[1])
+      {
+        if (ones[i,2]>zeros[j,2])
+        {conc[j,i]=1}
+        
+        else if (ones[i,2]<zeros[j,2])
+        {disc[j,i]=1}
+        
+        else if (ones[i,2]==zeros[j,2])
+        {ties[j,i]=1}
+      }
+    }
+    
+    Pairs=dim(zeros)[1]*dim(ones)[1]              #total number of pairs
+    PercentConcordance=(sum(conc)/Pairs)*100
+    PercentDiscordance=(sum(disc)/Pairs)*100
+    PercentTied=(sum(ties)/Pairs)*100
+    AUC=PercentConcordance +(0.5 * PercentTied)
+    
+    return(list("Percent Concordance"=PercentConcordance,
+                "Percent Discordance"=PercentDiscordance,
+                "Percent Tied"=PercentTied,
+                "Pairs"=Pairs,
+                "AUC"=AUC))
+  }
+
+```
+
+Problem 3(a)
+```{r}
+# imported dataset & named bank.additional.full
+
+# splitting 80% of given data to train data & 20% to test data.
+# Splitting in such a way that proportion of y= yes (or) no in both test and train data would be same.
+
+bank.additional.yes <- bank.additional.full[bank.additional.full$y=="yes",] # creating dataframe having y ="yes"
+dim(bank.additional.yes) # 4640 observations have y="yes" 
+bank.additinal.yes.train <- bank.additional.yes[1:3712, ] # 3712 is 80% of 4640,splitting 80% of observations into train dataframe
+bank.additinal.yes.test <- bank.additional.yes[3713:4640, ] # Remaining 20% of data to test data.
+
+bank.additional.no <- bank.additional.full[bank.additional.full$y=="no",] # creating dataframe having y ="no"
+dim(bank.additional.no) # 36548 observations have y="no" 
+bank.additinal.no.train <- bank.additional.no[1:29238, ] # 29238 is 80% of 36548,splitting 80% of observations into train dataframe.
+bank.additinal.no.test <- bank.additional.no[29239:36548, ] # Remaining 20% of data to test data.
+
+traindata <- rbind(bank.additinal.yes.train,bank.additinal.no.train) # creating train dataset having both y= yes & no values. 
+testdata <- rbind(bank.additinal.yes.test,bank.additinal.no.test) # creating test dataset having both y= yes & no values.
+
+testdata1 <- testdata # copying testdata to another dataframe.
+testdata_org_op <- testdata$y # copying output to another variable.
+testoutput <- ifelse(testdata$y =="yes", 1, 0) # assigning output of testdata yes to 1, no to 0.
+
+```
+Problem 3(b)
+```{r}
+fitLR <- glm(data=traindata, y~., family="binomial") # Logistic regression of training dataset developed.
+summary(fitLR) # summary of fit
+ 
+plot(fitLR) # plotting fit
+
+vif(fitLR) # To calculate vif
+
+# Residual Diagnistics
+pearsonRes <-residuals(fitLR,type="pearson") # pearson residuals
+devianceRes <-residuals(fitLR,type="deviance") # deviance residuals
+rawRes <-residuals(fitLR,type="response") # raw residuals
+studentDevRes<-rstudent(fitLR) # studentized residuals
+
+plot(studentDevRes) # plotting studentized residuals
+barplot(studentDevRes)
+barplot(cooks.distance(fitLR))
+
+#logisitic regression residuals:
+plot(predict(fitLR),residuals(fitLR))  #plot predicted value vs residuals
+abline(h=0,lty=2,col="grey")
+
+influence.measures(fitLR)
+influencePlot(fitLR) #Gives influence plot
+
+pred_probs_LR <- predict(fitLR, newdata=testdata,type = "response") # Predicting probability of test data from logistic regression
+
+predoutputLR =as.numeric(pred_probs_LR>0.5) # Considering 0.5 as threshold to give 1(yes) as output.
+
+dataframe_LR <- data.frame(trueval=testoutput,predictedval=predoutputLR) # Data frame for logistic Regression
+
+confusionMatrix(predoutputLR, testoutput) # confusion matrix of Logistic Regression
+
+```
+
+Problem 3(c)
+```{r }
+
+### elastic net regression
+
+# Tuning hyper parameters for the grid.
+lambda.grid<-seq(0.0001,0.04,length=50)
+alpha.grid<-seq(0,1,length=10)
+
+srchGrd <-expand.grid(.alpha=alpha.grid, .lambda=lambda.grid)
+
+ctrl<-trainControl(method="cv", number=5) # trainControl in caret
+
+#call caret function to perform CV using elastic net
+enet.fit<-train(y ~.,data=traindata, 
+                method="glmnet",
+                tuneGrid = srchGrd,
+                trControl=ctrl) #train is also a function in caret.
+
+plot(enet.fit)  #look at CV error for different values of alpha and lambda
+
+enet.fit$bestTune  #which was the best model
+
+enet.fit.best<-enet.fit$finalModel   #save best model (alpha value)
+coef(enet.fit.best, s = enet.fit$bestTune$lambda)  #look at coefficients associated with best lambda.
+
+predprobenet <- predict(enet.fit, newdata=testdata,type = "prob") #To predict the probabilities of response variable
+
+predoutput_enet =as.numeric(predprobenet >0.5) # Considering 0.5 as threshold to give 1(yes) as output.
+
+
+dataframe_enet <- data.frame(trueval=testdata$y,predictedval=predoutput_enet) # Data frame for decision tree
+
+
+### Decision Trees
+
+
+fitDT<-rpart(y~.,data=traindata)  #defaults to gini, 10-fold CV
+
+fitDT<-rpart(y~.,data=testdata,                   
+            parms=list(split="information"),   #can change to information gain
+            control=rpart.control(xval=20)  )  #can change k-fold CV 
+
+#the final tree 
+print(fitDT)   
+
+#the tree with a lot more details including surrogates, etc.
+summary(fitDT)
+
+#can look at the cost-parameter associated with different tree complexities
+printcp(fitDT)
+plotcp(fitDT)
+
+#easy to extract out the cost-parameter associated with lowest CV error
+fitDT$cptable[which.min(fitDT$cptable[,"xerror"]),"CP"]
+
+#visualize tree
+plot(fitDT)
+text(fitDT)
+
+#some packages include functions to make them even better
+fancyRpartPlot(fitDT) # from rattle package
+
+#or the party and partykit packages
+fitDTparty<-as.party(fitDT)
+plot(fitDTparty)
+
+predprobDT <-predict(fitDT, newdata=testdata, type = "prob")# predicting probability
+
+predoutput_DT =as.numeric(predprobDT>0.5) # Considering 0.5 as threshold to give 1(yes) as output.
+
+dataframe_DT <- data.frame(trueval=testoutput,predictedval=predoutput_DT) # Data frame for decision tree
+
+
+### randomForest
+
+fitRF <- randomForest(y ~ ., data = traindata, importance = T, ntrees=1500, mtry=3)
+fitRF # Training data using Random Forest
+
+predRF = predict(fitRF, newdata=testdata) # applying fitRF to testdata
+predRF = factor(predRF, levels = levels(testdata$y))
+
+confusionMatrix(predRF, testdata$y) # confusion matrix
+
+#Test Accuracy:   0.1423
+#Kappa:           0.0077
+
+
+#The plot method traces the error rates (out-of-bag, and by each response
+#category) as the number of trees increases. 
+
+plot(fitRF)
+
+varImpPlot(fitRF)
+
+predprobRF = predict(fitRF, newdata=testdata,type = "prob") # predicted probability to pass to user defined functions.
+
+```
+Problem 3(d)
+```{r}
+# Logistic Regression:
+
+# Inputs to userdefined function
+LRinp1 <- testoutput  # True value
+LRinp2 <- pred_probs_LR # Predicted probability
+
+# calling user defined function
+userfunction(LRinp1,LRinp2) # passing parametrs to userdefined function.
+Association(LRinp1,LRinp2) #FUNCTION TO CALCULATE CONCORDANCE AND DISCORDANCE ENDS
+ROCfunc (LRinp1,LRinp2) # Function to plot ROC & Area under curve.
+
+# Elastic Net Regression:
+
+# Inputs to userdefined function
+ENETinp1 <- testoutput   # True value
+ENETinp2 <- predprobenet # Predicted Probability
+
+# User defined functions on elastic net Regression
+
+userfunction(ENETinp1,ENETinp2) # passing parametrs to userdefined function.
+Association(ENETinp1,ENETinp2) #FUNCTION TO CALCULATE CONCORDANCE AND DISCORDANCE ENDS
+ROCfunc (ENETinp1,ENETinp2) # Function to plot ROC & Area under curve.
+
+# Decision Trees:
+
+# Inputs to userdefined function
+DTinp1 <- testoutput  # True value
+DTinp2 <- predprobDT  # Predicted output
+
+# User defined functions on Decision Trees
+
+userfunction(DTinp1,DTinp2) # passing parametrs to userdefined function.
+Association(DTinp1,DTinp2) #FUNCTION TO CALCULATE CONCORDANCE AND DISCORDANCE ENDS
+ROCfunc (DTinp1,DTinp2) # Function to plot ROC & Area under curve.
+
+# Random Forest:
+
+# Inputs to userdefined function
+RFinp1 <- testoutput # True value
+RFinp2 <- predprobRF # predicted output 
+
+# User defined functions on Random Forest
+
+userfunction(RFinp1,RFinp2) # passing parametrs to userdefined function.
+Association(RFinp1,RFinp2) #FUNCTION TO CALCULATE CONCORDANCE AND DISCORDANCE ENDS
+ROCfunc (RFinp1,RFinp2) # Function to plot ROC & Area under curve.
+
+```
+Problem 3(e)
+```{r}
+# User defined function to calculate accuracy
+
+User_error <- function (truevalues,predictedvalues){
+  error <- mean(predictedvalues != truevalues)
+  print(paste('Accuracy',1-error))
+}
+
+accuracyLR <- User_error(dataframe_LR$trueval,dataframe_LR$predictedval) # Accuracy of Logistic Regression 
+accuracyENET <- User_error(dataframe_enet$trueval,dataframe_enet$predictedval) # Accuracy of elastic net
+accuracyDT <- User_error(dataframe_DT$trueval,dataframe_DT$predictedval) # accuracy of Decision Tree
+# accuracy of Random Forest determined from  
+
+```
+
+Problem 4(a)
+```{r}
+### SVM
+
+fitsvm <- svm (y ~., data=traindata,kernel = "radial")
+summary(fitsvm)
+
+tuned <- tune(svm, y~ .,data=traindata ,kernel="radial", ranges=list(cost=c(0.001,.01,.1,1,10,100))) # Gives best cost parameter to be used.
+
+summary(tuned) # Summary of tuning
+
+# Constructing model after tuning:
+
+fitsvm2 <- svm(y ~ ., data=traindata, kernel="radial", cost=.1) # with cost parameter=0.1
+summary(fitsvm2)
+
+predsvm_output = predict(fitsvm2, newdata=testdata, type="prob") # applying fitsvm2 to testdata
+
+dataframe_SVM <- data.frame(trueval=testdata$y,predictedval=predsvm_output)# Dataframe for true & predicted output of SVM.
+
+confusionMatrix(predsvm_output, testdata_org_op) # confusion matrix of SVM
+
+accuracySVM <- User_error(dataframe_SVM$trueval,dataframe_SVM$predictedval) # accuracy of SVM
+```
+
+Problem 4(b)
+```{r}
+### Neural Network
+
+fitnn <- train(y~.,data=traindata,method='nnet',trControl= trainControl(method='cv',number = 2)) # By sending train data
+
+probnn <- predict(fitnn,testdata,type='prob')[,2] # predicting probabilities of test data.
+predoutputNN =as.numeric(probnn>0.5) # Threshold is 0.5
+
+dataframe_NN <- data.frame(trueval=testoutput,predictedval=predoutputNN)# Dataframe for true & predicted output of Neural Network.
+
+accuracyNN <- User_error(dataframe_NN$trueval,dataframe_NN$predictedval) # accuracy of Neural Network
+```
+
+```{r}
+# Applying NN output to userdefined functions.
+# Random Forest:
+
+# Inputs to userdefined function
+NNinp1 <- testoutput # True value
+NNinp2 <- probnn # predicted output 
+
+# User defined functions on Random Forest
+
+userfunction(NNinp1,NNinp2) # passing parametrs to userdefined function.
+Association(NNinp1,NNinp2) #FUNCTION TO CALCULATE CONCORDANCE AND DISCORDANCE ENDS
+ROCfunc (NNinp1,NNinp2) # Function to plot ROC & Area under curve.
+```

@@ -1,0 +1,192 @@
+Problem 2 
+
+```{r}
+library (VIM) # for calculating missing values
+library (MASS) #for stepAIC
+library(pls)  #load the plsr package for Partial Least Squares Regression
+library(car)  #load car to get vif
+library(caret) # for predict function
+library (magrittr)
+library(lars)
+library(glmnet)# For LASSO
+```
+Problem 2(a)
+```{r}
+housingData <- read.csv("E:/Masters/IDA/Assignments/Assignment 4/housingData.csv", header = TRUE, sep = ",") # Loading housing data
+
+miss <- aggr(housingData) # To find missingness in given data.
+summary(miss)
+
+housingData1 <- housingData[ ,c("MSSubClass", "MSZoning", "LotArea", "Neighborhood", "BldgType", "HouseStyle","OverallQual", "OverallCond", "YearBuilt", "MasVnrArea", "TotalBsmtSF", "HeatingQC", "CentralAir", "X1stFlrSF", "X2ndFlrSF", "BsmtFullBath", "BsmtHalfBath", "FullBath", "HalfBath", "BedroomAbvGr", "KitchenQual", "TotRmsAbvGrd", "GarageCars", "GarageArea", "YrSold","SalePrice")]
+# housingData1 contains 25 predictors which are significant in my opinion.
+
+# Model with all 25 variables of my choice.
+fitOLS25<-lm(data=housingData1,SalePrice ~ MSSubClass + MSZoning + LotArea + Neighborhood +BldgType+ HouseStyle+ OverallQual+ OverallCond+YearBuilt+ MasVnrArea+ TotalBsmtSF+ HeatingQC+ CentralAir +X1stFlrSF + X2ndFlrSF + FullBath+ HalfBath + BedroomAbvGr+ KitchenQual+TotRmsAbvGrd+GarageCars+GarageArea+YrSold)
+summary(fitOLS25) 
+
+table1 <- table(housingData$BldgType,housingData$CentralAir) # Creating table
+table1 # 1Fam - (43+794=837)
+table2 <- table(housingData$BsmtHalfBath,housingData$CentralAir) # creating table
+table2 # 0 - (63+878=941)
+
+# Model by removing above two variables, since they have one factor for much of the data.
+fitOLS23<-lm(data=housingData1,SalePrice ~ MSSubClass + MSZoning + LotArea + Neighborhood + HouseStyle+ OverallQual+OverallCond+ YearBuilt+ MasVnrArea+ TotalBsmtSF+ HeatingQC+ CentralAir +X1stFlrSF + X2ndFlrSF+BsmtFullBath + FullBath+ HalfBath + BedroomAbvGr+ KitchenQual+TotRmsAbvGrd+GarageCars+GarageArea+YrSold)
+summary(fitOLS23) 
+
+# Feature Engineering
+housingData1$YearsUsed <- housingData$YearBuilt - housingData$YrSold # Sale price depends on the number of years house used, rather than Yearbuilt and YearSold.
+
+fitOLS22<-lm(data=housingData1,SalePrice ~ MSSubClass + MSZoning + LotArea + Neighborhood + HouseStyle+ OverallQual+OverallCond+ YearsUsed+ MasVnrArea+ TotalBsmtSF+ HeatingQC+ CentralAir +X1stFlrSF + X2ndFlrSF+BsmtFullBath + FullBath+ HalfBath + BedroomAbvGr+ KitchenQual+TotRmsAbvGrd+GarageCars+GarageArea)
+summary(fitOLS22)
+
+housingData1$TotalFullBath <- housingData$BsmtFullBath - housingData$FullBath # Gives total number of fullBath rooms
+housingData1$Floorsqft <- housingData$X1stFlrSF + housingData$X2ndFlrSF # Gives total Floor area.
+housingData1$overall <- housingData$OverallQual + housingData$OverallCond # summing overall qual & OverallCond
+
+fitOLS19<-lm(data=housingData1,SalePrice ~ MSSubClass + MSZoning + LotArea + Neighborhood + HouseStyle+ overall+ YearsUsed+ MasVnrArea+ TotalBsmtSF+ HeatingQC+ CentralAir +Floorsqft+TotalFullBath+ HalfBath + BedroomAbvGr+ KitchenQual+TotRmsAbvGrd+GarageCars+GarageArea)
+summary(fitOLS19)
+
+housingData2 <- housingData1[ ,c("MSSubClass", "MSZoning", "LotArea", "Neighborhood", "HouseStyle", "MasVnrArea", "TotalBsmtSF", "HeatingQC", "CentralAir", "HalfBath", "BedroomAbvGr", "KitchenQual", "TotRmsAbvGrd", "GarageCars", "GarageArea", "YearsUsed", "overall", "TotalFullBath", "Floorsqft","SalePrice")] # Dataset with 19 predectors.
+
+missmodel <- aggr(housingData2) # To find missingness in choosen variables.
+summary(missmodel) # Gives summary of missing variables
+# MasVnrArea has missing values.
+
+# Imputing missing values for the variable having missing values (MasVnrArea)
+missing <- is.na(housingData2$MasVnrArea) # Gives logical value for missing and not missing for MasVnrArea.
+housingData2[missing,"MasVnrArea"]<-mean(housingData2$MasVnrArea,na.rm=T)   #imputation by mean
+
+# To check did we remove missingness in data...?
+missmodel <- aggr(housingData2) # To find missingness in choosen variables.
+summary(missmodel)
+```
+Problem 2(b)
+```{r}
+housingData3 <- housingData2[1:100,] # Creating holdout validation set.
+housingData4 <- housingData2[101:1000,] # Creating training data set.
+
+# linear model with my predictors used to train 900 rows.
+fitOLS_900<-lm(data=housingData4,log(SalePrice) ~ MSSubClass + MSZoning + LotArea + Neighborhood + HouseStyle+ overall+ YearsUsed+ MasVnrArea+ TotalBsmtSF+ HeatingQC+ CentralAir +Floorsqft+TotalFullBath+ HalfBath + BedroomAbvGr+ KitchenQual+TotRmsAbvGrd+GarageCars+GarageArea)
+summary(fitOLS_900) # Multiple R-squared:  0.9246,	Adjusted R-squared:  0.920
+AIC(fitOLS_900) # -1505.821
+BIC(fitOLS_900) # -1280.108
+rss.OLS <- sum(fitOLS_900$resid^2)/fitOLS_900$df.residual #0.0104
+
+# Appling stepwise regression for the previous model.
+fitstep<-stepAIC(fitOLS_900,direction="both") # performing stepwise regression.
+summary(fitstep) # R-squared:  0.9236,	Adjusted R-squared: 0.920
+AIC(fitstep) # -1513.249
+BIC(fitstep) # -1335.561
+fitstep # To get model displayed.
+rss.stepwise <- sum(fitstep$resid^2)/fitstep$df.residual # 0.0104
+
+# performing backward selection for the my predector model.
+fitback <- step(fitOLS_900, direction="backward")
+summary(fitback) # R-square- 0.9236, Adjusted R-squared: 0.920
+AIC(fitback) #-1513.249
+BIC(fitback) # -1335.561
+fitback # To get model displayed.
+rss.stepwise <- sum(fitstep$resid^2)/fitstep$df.residual # 0.0104
+
+# I have chosen model by backward selection because it has greater r-square. 
+# Model that is given as output of backward regression and accessing this model for holdout validation set.
+fitbackhold <-lm(data = housingData3,log(SalePrice) ~ MSSubClass + MSZoning + LotArea + Neighborhood + HouseStyle + overall + YearsUsed + MasVnrArea + TotalBsmtSF + 
+    CentralAir + Floorsqft + TotalFullBath + BedroomAbvGr + GarageCars) # Linearmodel given by backward regression.
+summary(fitbackhold) # Multiple R-squared:  0.9389,	Adjusted R-squared: 0.908
+#Residual standard error: 0.1118
+#p-value: < 2.2e-16
+AIC(fitbackhold) # -125.9576
+BIC(fitbackhold) # -34.77667
+vif(fitbackhold)
+
+RMSE <- function(predicted) # Function to calculate RMSE
+{
+    error = log(housingData4$SalePrice)-predicted
+  sqrt(mean(error^2))
+}
+
+pred <- predict(fitbackhold,newdata = housingData4 )# Predicts log(SalePrice) for 100 observations.
+RMSE(pred)
+
+# RMSE is 0.4936459
+
+#Analysis of Residuals
+
+residualPlots(fitbackhold) # Gives plots of all variables.
+# Almost all data variables has outliers (MSSubClass, LotArea, overall, YearsUsed, MassVnrArea, TotalBsmtSF,Floorsqft,GarageCars)
+
+influencePlot(fitbackhold) # plots studentized residuals with Hat values
+
+```
+Problem 2(c)
+```{r}
+# Considering the model we got after stepwise regression.
+
+# training model with pls by method = kernelps and applying cross validation with 8 components.
+plsmodel.fit<-plsr(log(SalePrice) ~ MSSubClass + MSZoning + LotArea + Neighborhood + HouseStyle + overall + YearsUsed + MasVnrArea + TotalBsmtSF +CentralAir + Floorsqft + TotalFullBath + BedroomAbvGr + GarageCars, data = housingData4, method = "kernelpls",validation = "CV",8)# applied to 101 to 1000 rows of original dataset.
+summary(plsmodel.fit)# summary of plsmodel
+plot(plsmodel.fit) # plotting model of 900 observations for log(Sale Price).
+# From the plot we can observe that the model is linear(both measured and predicted are directly proportinal).
+
+plot(plsmodel.fit, ncomp = 1, asp = 1, line = TRUE) # number of components is 1
+plot(plsmodel.fit, ncomp = 4, asp = 1, line = TRUE) # number of components is 4
+plot(plsmodel.fit, ncomp = 5, asp = 1, line = TRUE) # number of components is 5
+plot(plsmodel.fit, ncomp = 6, asp = 1, line = TRUE) # number of components is 6
+plot(plsmodel.fit, ncomp = 7, asp = 1, line = TRUE) # number of components = 7,aspect ratio =1.
+# From here 7 components is enough for linear fit.
+
+pls.predict<-predict(plsmodel.fit, housingData3, ncomp = 7) # using pls model generated above, and applying for first 100 observations to predict log saleprice.
+
+plot(log(housingData3$SalePrice),pls.predict)# plot between predicted log(salePrice) & actual log(SalePrice)
+
+beta.pls <- drop(coef(plsmodel.fit)) # calculating gradients(slope)
+resid.pls <- drop(plsmodel.fit$resid)# Gives Residuals.
+rss.pls <- sum(resid.pls^2)/(67-4) #  residual sum of squares 4.524567.
+pls.rmse <- sqrt(mean(plsmodel.fit$residuals^2)) # Root Mean Square Error is 0.1989
+
+plot(RMSEP(plsmodel.fit),legendpos="topright")# plots rootmean squared error along with number of componets.
+
+```
+Problem 2(d)
+```{r}
+Predectors <- housingData2[,1:19]
+Dependent <- housingData2[,20]
+for(i in 1:ncol(housingData2)) # To convert data into numeric data.
+{
+  if(is.factor(housingData2[,i]))
+  {
+    housingData2[,i]=as.numeric(housingData2[,i])
+  }
+}
+
+cvLasso <- cv.glmnet(Predectors,Dependent) # LASSO USING glmnet
+plot.cv.glmnet(cvLasso)
+
+```
+
+Problem 2(e)
+```{r}
+# I am selecting model developed by stepwise regression done on my predectors since it has  Multiple R-squared:  0.9389,	Adjusted R-squared: 0.908 & residual error of 0.1118.
+
+housingdata.test<- read.csv("E:/Masters/IDA/Assignments/Assignment 4/housingTest.csv", header = TRUE, sep = ",") # Loading housing datatest.
+
+#Constructing features developed by feature engineering in test data
+#
+housingdata.test$YearsUsed <- housingdata.test$YearBuilt - housingdata.test$YrSold
+housingdata.test$TotalFullBath <- housingdata.test$BsmtFullBath - housingdata.test$FullBath 
+housingdata.test$Floorsqft <- housingdata.test$X1stFlrSF + housingdata.test$X2ndFlrSF 
+housingdata.test$overall <- housingdata.test$OverallQual + housingdata.test$OverallCond
+
+predictFinal_log <- predict(fitback, housingdata.test) # predicting log(SalePrice)
+
+predictedSalePrice <- exp(predictFinal_log) # Converting from log from to actual form.
+predicted <- data.frame(housingdata.test$Id,predictedSalePrice) # Creating dataframe as per given requirements.
+
+write.csv(predicted,"Predicted Saleprice of TestData.csv",row.names=FALSE) # creating Excel File.
+
+
+```
+
+```{r}
+
+```

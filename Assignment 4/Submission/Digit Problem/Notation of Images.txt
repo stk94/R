@@ -1,0 +1,1 @@
+1. Image X-Y represents Image of Xth image which can be retrieved using Y principal components.

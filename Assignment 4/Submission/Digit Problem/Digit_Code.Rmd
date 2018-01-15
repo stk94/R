@@ -1,0 +1,227 @@
+```{r}
+library(jpeg) # To get image.
+library(VIM) # To expore missing values.
+```
+Problem 1
+```{r}
+ClassDigits <- read.csv("E:/Masters/IDA/Assignments/Assignment 4/DigitData/classDigits.csv", header = TRUE, sep = ",") # Loading ClassDigits training set of images. 
+```
+Problem 1(a)
+```{r}
+ClassDigits1<-ClassDigits[,-1] # Removing label column 
+colsum <- colSums(ClassDigits1) # getting column sum of all the pixcels
+Mean <- (colsum/30000) # To get mean value of all pixcels
+ClassDigits2 <-ClassDigits1 # Assigning dataframe to ClassDigits2
+
+for (i in 1:30000) # For all 30000 images
+  ClassDigits2[i,] <- ClassDigits1[i,]- Mean # calculating (X - Mean) to all images 
+
+pc<-prcomp(ClassDigits2,center = FALSE) # principal component analysis
+summary(pc) # summary of principal component analysis
+
+EigenVectors <- pc$rotation # we know that roation in principal component analysis gives eigen vectors.
+EigenVectors[1,1:20 ] # It gives 784 Eigen Vectors related to first image.(Since only part of the data is asked to show) 
+```
+Problem 1(b)
+```{r}
+digitMatrix <- matrix(Mean,28,28,byrow=TRUE) # To convert raw data into matrix form.
+jpeg <- writeJPEG(digitMatrix/255,target="MeanDigit.jpg") # To convert matrix into mage.
+```
+Problem 1(c)
+```{r}
+#For image 15
+diff15 <- ClassDigits2[15, ] # (X-Mean) of 15 th image.
+a <- vector(mode="numeric", length=0) # Creating an empty vector a to run in loop.
+# K = 5
+ for (j1 in 1:5) # for 5 values of k
+   a[j1] <- as.matrix(diff15) %*% EigenVectors[ ,j1] # calculating weights
+sum_15_5=Mean # Initializing mean to sum_15_5
+for(p1 in 1:5)
+sum_15_5 <- sum_15_5 +(a[p1] * EigenVectors[ ,p1]) #Reconstruction by adding mean to the product of (weights and vectors).
+digitMatrix_15_5 <- matrix(sum_15_5,28,28,byrow=TRUE) # To convert raw data into matrix form.
+jpeg <- writeJPEG(digitMatrix_15_5,target="Image15-5.jpg") # To convert matrix into image.
+
+# k = 20
+for (j1 in 1:20) # for 20 values of k
+   a[j1] <- as.matrix(diff15) %*% EigenVectors[ ,j1] # calculating weights
+sum_15_20=Mean # Initializing mean to sum_15_20
+for(p1 in 1:20)
+sum_15_20 <- sum_15_20 +(a[p1] * EigenVectors[ ,p1]) #Reconstruction by adding mean to the product of (weights and vectors).
+digitMatrix_15_20 <- matrix(sum_15_20,28,28,byrow=TRUE) # To convert raw data into matrix form.
+jpeg <- writeJPEG(digitMatrix_15_20,target="Image15-20.jpg") # To convert matrix into mage.
+
+# k = 100
+for (j1 in 1:100) # for 100 values of k
+   a[j1] <- as.matrix(diff15) %*% EigenVectors[ ,j1] # calculating weights
+sum_15_100=Mean  # Initializing mean to sum_15_100
+for(p1 in 1:100)
+sum_15_100 <- sum_15_100 +(a[p1] * EigenVectors[ ,p1]) #Reconstruction by adding mean to the product of (weights and vectors).
+digitMatrix_15_100 <- matrix(sum_15_100,28,28,byrow=TRUE) # To convert raw data into matrix form.
+jpeg <- writeJPEG(digitMatrix_15_100,target="Image15-100.jpg") # To convert matrix into mage
+
+# k = 784 (To observe the whole image)
+for (j1 in 1:784) # for all values of k
+   a[j1] <- as.matrix(diff15) %*% EigenVectors[ ,j1] # calculating all weights
+sum_15_784=Mean  # Initializing mean to sum_15_784
+for(p1 in 1:784)
+sum_15_784 <- sum_15_784 +(a[p1] * EigenVectors[ ,p1]) #Reconstruction by adding mean to the product of (weights and vectors). 
+digitMatrix_15_784 <- matrix(sum_15_784,28,28,byrow=TRUE) # To convert raw data into matrix form.
+jpeg <- writeJPEG(digitMatrix_15_784,target="Image15-784.jpg") # To convert matrix into mage
+
+#For image 100
+diff100 <- ClassDigits2[100, ] # (X-Mean) of 100 th image.
+
+# K = 5
+ for (j1 in 1:5)
+   a[j1] <- as.matrix(diff100) %*% EigenVectors[ ,j1] # calculating weights
+sum_100_5=Mean # Initializing mean to sum_100_5
+for(p1 in 1:5)
+sum_100_5 <- sum_100_5 +(a[p1] * EigenVectors[ ,p1]) #Reconstruction by adding mean to the product of (weights and vectors). 
+digitMatrix_100_5 <- matrix(sum_100_5,28,28,byrow=TRUE) # To convert raw data into matrix form.
+jpeg <- writeJPEG(digitMatrix_100_5,target="Image100-5.jpg") # To convert matrix into mage.
+
+# k = 20
+for (j1 in 1:20)
+   a[j1] <- as.matrix(diff100) %*% EigenVectors[ ,j1] # calculating weights
+sum_100_20=Mean # Initializing mean to sum_100_20
+for(p1 in 1:20)
+sum_100_20 <- sum_100_20 +(a[p1] * EigenVectors[ ,p1]) #Reconstruction by adding mean to the product of (weights and vectors). 
+digitMatrix_100_20 <- matrix(sum_100_20,28,28,byrow=TRUE) # To convert raw data into matrix form.
+jpeg <- writeJPEG(digitMatrix_100_20,target="Image100-20.jpg") # To convert matrix into mage.
+
+# k = 100
+for (j1 in 1:100)
+   a[j1] <- as.matrix(diff15) %*% EigenVectors[ ,j1] # calculating weights
+sum_100_100=Mean # Initializing mean to sum_100_100
+for(p1 in 1:100)
+sum_100_100 <- sum_100_100 +(a[p1] * EigenVectors[ ,p1]) #Reconstruction by adding mean to the product of (weights and vectors). 
+digitMatrix_100_100 <- matrix(sum_100_100,28,28,byrow=TRUE) # To convert raw data into matrix form.
+jpeg <- writeJPEG(digitMatrix_100_100,target="Image100-100.jpg") # To convert matrix into mage
+
+# k = 784 (To observe the image clearly)
+for (j1 in 1:784)
+   a[j1] <- as.matrix(diff100) %*% EigenVectors[ ,j1] # calculating all weights
+sum_100_784=Mean # Initializing mean to sum_100_784
+for(p1 in 1:784)
+sum_100_784 <- sum_100_784 +(a[p1] * EigenVectors[ ,p1]) #Reconstruction by adding mean to the product of (weights and vectors). 
+digitMatrix_100_784 <- matrix(sum_100_784,28,28,byrow=TRUE) # To convert raw data into matrix form.
+jpeg <- writeJPEG(digitMatrix_100_784,target="Image100-784.jpg") # To convert matrix into mage
+
+```
+Problem 1(d)
+```{r}
+Class7test <- read.csv("E:/Masters/IDA/Assignments/Assignment 4/DigitData/class7test.csv", header = TRUE, sep = ",") # Loading test data.
+Class7test1 <- Class7test[ ,-c(1,2,787)] # Removing non pixcel components
+transtest <- as.matrix(Class7test1) %*% EigenVectors # Projecting test data on digitspace.
+
+d1 <- mahalanobis(pc$x[ ,1:60],transtest[1,1:60],cov(pc$x[ ,1:60]))# Gives distance of 1 st digit in test file w.r.t all 30000 images in trained file.
+d2 <- mahalanobis(pc$x[ ,1:60],transtest[2,1:60],cov(pc$x[ ,1:60]))# Gives distance of 2 nd digit in test file w.r.t all 30000 images in trained file.
+d3 <- mahalanobis(pc$x[ ,1:60],transtest[3,1:60],cov(pc$x[ ,1:60]))# Gives distance of 3 rd digit in test file w.r.t all 30000 images in trained file.
+d4 <- mahalanobis(pc$x[ ,1:60],transtest[4,1:60],cov(pc$x[ ,1:60]))# Gives distance of 4 th digit in test file w.r.t all 30000 images in trained file.
+d5 <- mahalanobis(pc$x[ ,1:60],transtest[5,1:60],cov(pc$x[ ,1:60]))# Gives distance of 5 th digit in test file w.r.t all 30000 images in trained file.
+d6 <- mahalanobis(pc$x[ ,1:60],transtest[6,1:60],cov(pc$x[ ,1:60]))# Gives distance of 6 th digit in test file w.r.t all 30000 images in trained file.
+d7 <- mahalanobis(pc$x[ ,1:60],transtest[7,1:60],cov(pc$x[ ,1:60]))# Gives distance of 7 th digit in test file w.r.t all 30000 images in trained file.
+mean(d1) # Mean Mahalanobis distance of image 1 in test data.
+mean(d2) # Mean Mahalanobis distance of image 2 in test data.
+mean(d3) # Mean Mahalanobis distance of image 3 in test data.
+mean(d4) # Mean Mahalanobis distance of image 4 in test data.
+mean(d5) # Mean Mahalanobis distance of image 5 in test data.
+mean(d6) # Mean Mahalanobis distance of image 6 in test data.
+mean(d7) # Mean Mahalanobis distance of image 7 in test data.
+```
+Problem 1(e)
+```{r}
+# for image 4 in test data (digit7)
+d4k <- mahalanobis(pc$x[ ,1:7],transtest[4,1:7],cov(pc$x[ ,1:7]))# Gives distance of 4 th digit in test file w.r.t all 30000 images in trained file.
+ClassDigits[which.min(d4k),1] # gives the digit of the image with minimum distance.
+# So minimum value of k is 7.
+
+# for image 5 in test data (digit5)
+d5k <- mahalanobis(pc$x[ ,1:93],transtest[5,1:93],cov(pc$x[ ,1:93]))# Gives distance of 5 th digit in test file w.r.t all 30000 images in trained file.
+ClassDigits[which.min(d5k),1] # gives the digit of the image with minimum distance.
+# minimum value of k is 93.
+
+# for image 6 in test data (digit6)
+d6k <- mahalanobis(pc$x[ ,1:15],transtest[6,1:15],cov(pc$x[ ,1:15]))# Gives distance of 6 th digit in test file w.r.t all 30000 images in trained file.
+ClassDigits[which.min(d6k),1] # gives the digit of the image with minimum distance.
+# We need a minimum value of 15.
+```
+ExtraCredit
+```{r}
+# subsetting given data as per digits
+digit0 <- subset(ClassDigits, label == "0") # dataframe having Images of 0
+pcdigit0<-prcomp(digit0) # principal component analysis of digit 0 
+
+digit1 <- subset(ClassDigits, label == "1") # dataframe having Images of 1
+pcdigit1<-prcomp(digit1) # principal component analysis of digit 1 
+
+digit2 <- subset(ClassDigits, label == "2") # dataframe having Images of 2
+pcdigit2<-prcomp(digit2) # principal component analysis of digit 2
+
+digit3 <- subset(ClassDigits, label == "3") # dataframe having Images of 3
+pcdigit3<-prcomp(digit3) # principal component analysis of digit 3
+
+digit4 <- subset(ClassDigits, label == "4") # dataframe having Images of 4
+pcdigit4<-prcomp(digit4) # principal component analysis of digit 4
+
+digit5 <- subset(ClassDigits, label == "5") # dataframe having Images of 5
+pcdigit5<-prcomp(digit5) # principal component analysis of digit 5
+
+digit6 <- subset(ClassDigits, label == "6") # dataframe having Images of 6
+pcdigit6<-prcomp(digit6) # principal component analysis of digit 6
+
+digit7 <- subset(ClassDigits, label == "7") # dataframe having Images of 7
+pcdigit7<-prcomp(digit7) # principal component analysis of digit 7
+
+digit8 <- subset(ClassDigits, label == "8") # dataframe having Images of 8
+pcdigit8<-prcomp(digit8) # principal component analysis of digit 8
+
+digit9 <- subset(ClassDigits, label == "9") # dataframe having Images of 9
+pcdigit9<-prcomp(digit9) # principal component analysis of digit 9
+
+   # Inter Distance calculation
+# Lets take example of distance between digit1 to digit2
+# There are 3312 images having digit as 1 (So loop runs from 1 to 3312)
+# Assuming k = 60.(To make simpler for computation )
+d1to2 <- matrix(nrow=3312,ncol=2960) # matrix creation
+for(h in 1:nrow(digit1))
+d1to2[h , ] <- mahalanobis(pcdigit2$x[ ,1:60],as.numeric(digit1[h,1:60]),cov(pcdigit2$x[ ,1:60])) # Gives distance of h th (1 to 3312) image of digit1 to images in digit2
+colsum1to2 <- colSums(d1to2) # column sum of distances
+sum1to2 <- sum(colsum1to2)# Gives entire sum of distances of every digit1 to each digit2
+mean1to2 <- sum1to2/(nrow(digit1)*nrow(digit2)) # To get mean inter distance.
+mean1to2 # Mean mahalanobis distance from digit 1 to digit 2 is 59.98251
+
+  # Intra Distance calculation
+# Lets take example of distance between digit1 to digit1
+# There are 3312 images having digit as 1
+
+d1to1 <- matrix(nrow=3312,ncol=3312) # matrix creation
+for(g in 1:nrow(digit1)) #1 to number of images having 1 as digit.
+d1to1[g, ] <- mahalanobis(pcdigit1$x[ ,1:60],as.numeric(digit1[g,1:60]),cov(pcdigit1$x[ ,1:60])) # Gives distance of g th (1 to 3312) image of digit1 to all other images in digit1
+colsum1to1 <- colSums(d1to1) # column sum of distances
+sum1to1 <- sum(colsum1to1)# Gives entire sum of distances of every digit1 to each digit1
+mean1to1 <- sum1to1/(nrow(digit1)*nrow(digit1)) # To get mean intra distance.
+mean1to1 # Mean mahalanobis distance from digit 1 to digit 1 is 59.9951
+
+### Similarly we can calculate all Intra and Inter distances by using looping, but i am not showing since it takes much time for system to run.So, i have explained the concept above by assuming an example for inter and intra distances.
+```
+```s
+```{r}
+
+
+```
+
+```{r}
+
+
+```
+
+
+
+
+
+
+
+
+
+

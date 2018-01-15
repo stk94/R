@@ -1,0 +1,204 @@
+---
+title: "ASSIGNMENT-1"
+author: "SAI TEJA KANNEGANTI"
+date: "28 August 2016"
+output: word_document
+---
+DSA 5103 : INTELLIGENT DATA ANALYTICS
+Required Packages for this assignment :
+```{r}
+  library (moments) # Contains functions skewness and kurtosis
+  library (plyr)    # To load dataframe baseball
+  library(datasets) # To load quakes data from datasets package
+  library(reshape)   #contains replace function
+```
+PROBLEM 1 : Vectors using R
+
+PROBLEM 1(a):
+```{r}
+x <- c(3,12,6,-5,0,8,15,1,-10,7) # To concatinate 10 numerical values in x.
+```
+Problem 1(b):
+```{r}
+y <- seq(min(x),max(x),length=10) #Finding minimum and maximum values of x and splitting interval into 10 numbers and assigning to y.
+y
+```
+problem 1(c)
+For x
+```{r}
+sum(x) 
+mean(x) 
+sd(x) 
+var(x) 
+mad(x) # To find Mean Absolute Deviation.
+quantile (x, probs=c(0.0,0.25,0.50,0.75,1.0)) # Displays value of random variable at these fractions.
+quantile (x, probs=c(0,0.20,0.40,0.60,0.80,1.0))
+```
+For y
+```{r}
+sum(y) 
+mean(y) 
+sd(y) 
+var(y) 
+mad(y) 
+quantile (y, probs=c(0.0,0.25,0.50,0.75,1.0))
+quantile (y, probs=c(0.0,0.20,0.40,0.60,0.80,1.0)) 
+```
+quartiles are values of random variable that divide into 4 groups.
+quintiles are values of random variable that divide into 5 groups.
+problem 1(d):
+```{r}
+z<- sample (x,7, replace = TRUE) # Sampling random variable x,to choose 7 elements with replacement.
+z
+```
+problem 1(e):
+```{r}
+skewness(x) 
+kurtosis(x)# moments is package, skewness & kurtosis are funtions to determine skewness and kurtosis.
+```
+Skewness and kurtosis can also be determined in e1701 package, but this package is not available in R version 3.3.1
+problem 1(f)
+```{r}
+t.test(x,y) # t-test of 2 independent vectors with some default parameters.
+```
+As p value is greater than 0.05 and 0 lies in the confidence interval, hypothesis is true,i.e. true difference between means is 0. So the difference of means is insignificant.
+problem 1(g)
+```{r}
+sort(x) 
+t.test(x, sort (x),paired=TRUE) # paired t-test between x and sort(x).
+```
+Since we are performing paired t-test between x and sort(x),mean of the differences is 0.
+problem 1(h)
+```{r}
+n <- x[x<0] # n is a vector having negative valus of x.
+n
+```
+problem 1(I)
+```{r}
+x <- x[!x %in% n]  # !x indicates not x,!x includes n,so x doesnot include n.
+x
+```
+PROBLEM 2
+
+problem 2 (a):
+```{r}
+college <- read.csv("E:/Masters/IDA/Assignments/Assignment 1/college.csv", header = TRUE, sep = ",") # read.csv() function to read tablular data & create a data frame. 
+```
+problem 2(b):
+```{r}
+rownames (college) <- college [,1] # Assigning first column(university name) as row names of dataframe.
+
+View (college) # To View dataframe.
+
+college <- college [,-1] # Removing first column of the dataframe.
+```
+problem 2(c)
+1.
+```{r}
+summary(college) #Provides numerical summary of datavariables in college.
+```
+ 2.
+```{r}
+pairs(college[,1:10]) # pairs is used to produce a matrix of scatter plots.
+```
+Scatterplot of 1 to 10 columns of dataframe college.
+3.
+```{r}
+plot(college$Private, college$Outstate,main="Outstate Students in Private Universities",xlab = "Private", ylab = "Outstate")
+```
+Side by side boxplots of outstate students Vs private universities.
+4.
+```{r}
+Elite <- rep ("NO", nrow(college)) # Replicates NO to all rows in college dataframe.
+Elite [college$Top10perc >50] <- "Yes" # Elite contains universities having Top10perc greater than 50
+Elite <- as.factor (Elite) # as.factor is used to encode a vector as a factor(1 for no,2 for yes)
+college <- data.frame(college ,Elite) # To create Elite data variable in college dataframe
+```
+5.
+```{r}
+summary (Elite)
+```
+There are 78 Elite universities in given college list.
+6.
+```{r}
+plot(college$Elite,college$Outstate, main="Outstate studets in Elite Universities",ylab="Outstate",xlab="Elite")
+```
+Side by side boxplots of outstate students in Elite universities.
+7.
+```{r}
+par(mfrow=c(3,2)) # used for multiple number of plots simultaniously (r*c).
+hist(college$Apps,breaks=9) # Histogram for no of applications(Apps) with 9 breaks
+hist(college$Accept,breaks=11)
+hist(college$Enroll,breaks=14)
+hist(college$Outstate,breaks=9)
+hist(college$Books,breaks=9)
+hist(college$Grad.Rate,breaks=14)
+```
+Some histograms with differing numbers of bins for few of the quantitative variables.
+Problem 3 : Manipulating data into data frames
+
+Problem 3(a):
+```{r}
+data(baseball) # data loads specified data sets.
+```
+problem 3(b)
+```{r}
+baseball$sf[baseball$year< 1954] <- 0  # equating value of sf to 0,when year in baseball dataframe is less than 1954.
+baseball$hbp[is.na(baseball$hbp)] <- 0 # Equating all missing values(NA) in hbp to 0.
+baseball <- baseball[c(baseball$ab>=50), ] #Baseball contains rows of players whose ab >= 50(deletes rows of players with ab < 50) & all columns remains unchanged.
+```
+problem 3(c)
+```{r}
+obp <-((baseball$h+baseball$bb+baseball$hbp)/(baseball$ab+baseball$bb+baseball$hbp+baseball$sf)) 
+baseball <- data.frame(baseball,obp) # combining obp variable(column) to baseball dataframe.
+```
+problem 3(d)
+```{r}
+Result <- baseball[order(-obp) , ] # Result is a dataframe containing rows sorted as per obp(-obp indicates decreasing order)
+Result <- Result[1:5, ] # Considering only 1 to 5 rows.
+Result[3:22] <- list(NULL) # Removing 3 to 22 columns.
+head(Result)
+```
+Result contains player name, year and on base percentage of top 5 records.
+problem 4
+
+problem 4(a)
+```{r}
+data(quakes) # to load quakes from datasets package.
+```
+problem 4 (b)
+```{r}
+plot(quakes$depth,quakes$mag,main= "Earth quake Magnitude Vs Earth quake depth",xlab= "depth",ylab= "magnitude") # To plot a graph, need to give x-axis,y-axis quantities, we use $ inorder to access particular column in dataframe, later main is used for title, xlab,ylab used for labels.
+```
+Plot between Earth quake magnitude and depth from surface
+problem 4 (c)
+```{r}
+quakeAvgDepth <- aggregate(quakes$depth,by = list (quakes$mag),mean) #we are using aggregate function to calculate average depth for given sequencence of magnitude,since we are calculating average depth, function written is mean.
+```
+problem 4(d)
+```{r}
+colnames(quakeAvgDepth) <- c("Magnitude","Avg_depth") # To list column names of dataframe.(we can also use rename command).
+```
+Renamed variables to Magnitude, Avg depth.
+problem 4 (e)
+```{r}
+plot(quakeAvgDepth$Avg_depth,quakeAvgDepth$Magnitude,main= "Magnitude Vs Average earth quake depth",xlab= "Average depth",ylab= "magnitude") # Used renamed variables of "quakeAvgDepth" data frame to plot graph.
+```
+Plot between Earth quake magnitude and Average depth from surface
+problem 4(f)
+From the graphs we can understand that:
+1. Generally magnitude of earthquake increases with decrease in depth from earth surface.(From plot 4(e))
+2. More number of earthquakes occur at lower magnitudes(from 4.0 to 5.0).(From plot 4(b)).
+
+
+
+
+
+
+
+
+
+
+
+
+

@@ -1,0 +1,484 @@
+
+
+```{r}
+library(VIM)
+library(C50)
+library(corrplot)
+library(gridExtra)
+library(dplyr)
+library(GGally)
+library(outliers)
+library(EnvStats)
+library(randomForest)
+library(ipred)
+library(e1071)
+library(neuralnet)
+library(caret)
+library(rattle)
+library(mice)
+library(rpart)
+library(useful)
+library(tidyr)#to use gather, similar to melt in reshape2
+library(gbm)
+library(glmnet)
+library(MASS)
+library(car)
+library(doParallel)
+library(lattice)
+#######
+```
+
+#Project Understanding
+```{r setup Project Understanding}
+new_movie_df = read.csv("movie_metadata.csv" ,header = T) 
+```
+
+#Data Understanding
+
+#Data Preparation
+
+```{r Data Preparation:Stragegy selection}
+remove <- c("movie_imdb_link", "color","country","plot_keywords","actor_3_name","movie_title","actor_1_name","genres","actor_2_name","director_name", "language","content_rating")
+new_movie_df <- new_movie_df[, !colnames(new_movie_df) %in% remove]
+```
+
+```{r Data Preparation: Missing}
+
+new_movie_df[new_movie_df== ""] <- NA
+sort(sapply(new_movie_df, function(x){sum(is.na(x))}), decreasing = T)
+#micetry = mice(new_movie_df, m = 2, maxit = 2)
+complete_movie_df <- new_movie_df[complete.cases(new_movie_df),]
+new_movie_df[243,"budget"] = new_movie_df[243,"budget"]*1.07
+new_movie_df[2989,"budget"] = new_movie_df[2989,"budget"]*1.07
+new_movie_df[3820,"budget"] = new_movie_df[3820,"budget"]/25.23
+
+```
+
+
+```{r Data Preparation: Outliers}
+#str(complete_movie_df)
+grubbs.test(complete_movie_df$facenumber_in_poster)
+#There are outliers in variables, ideally there could be no limits in number of facebook likes for directors,actors and in number of user ratings.
+#complete_movie_df[3010,]
+#So Using only the cases where facenumber_in_poster<40.Above 40 is totally unrealistic
+complete_movie_df <- complete_movie_df[complete_movie_df$facenumber_in_poster<40,]
+```
+
+
+```{r Data Preparation : Vizualization: Corrplot}
+cor_df <- complete_movie_df
+corMat <- cor(cor_df)
+#quartz()
+corrplot(corMat, method = "circle",type = "lower")
+#imdb is correlated with 
+## num_critic_for_reviews, duration, num_voted_users, num_user_for_reviews
+```
+#######Collinearity exists between actor_1_facebook_likes and cast_total_facebook_likes
+
+```{r Data Preparation : Vizualizations}
+visualization_df <- complete_movie_df
+
+####-------IMDB_SCORE Vs YEAR-------#######
+count=rep(0,100)
+i=1
+for(years in 1916:2016){
+count[i]<- mean(visualization_df$imdb_score[visualization_df$title_year==years])
+i=i+1
+}
+years=1916:2016
+# ggplot(aes(x=years, y=count)) + geom_point(color='darkblue')
+quartz()
+plot(years,count,xlab="Year",ylab="Average IMDB Score")
+
+
+####-------IMDB_SCORE Vs BUDGET-------#######
+count=rep(0,100)
+i=1
+for(years in 1916:2016){
+No_Movies<-sum(visualization_df$title_year==years)
+Tot_Bud<-sum(visualization_df$budget[visualization_df$title_year==years])
+count[i]<-Tot_Bud/No_Movies
+i=i+1
+}
+years=1916:2016
+plot(years,count,xlab="Year",ylab="Average Budjet")
+
+####-------Movies per YEAR-------#######
+count=rep(0,100)
+i=1
+for(years in 1916:2016){
+No_Movies <- as.numeric(visualization_df$title_year==years)
+No_Movies <- sum(No_Movies)
+count[i] <- No_Movies
+i=i+1
+}
+years=1916:2016
+plot(years,count,xlab="Year",ylab="Number of Movies")
+
+####-------Is number of movie & Director facebook likes indication of imdb score-------#######
+ggplot(visualization_df, aes(x=imdb_score, y=movie_facebook_likes)) + 
+  geom_point(color='darkblue')
+# will the number of fblikes of director influence the imdb score
+ggplot(visualization_df, aes(x=imdb_score, y=director_facebook_likes)) + 
+  geom_point(color='darkblue')
+
+# To view with predictors having high correlation.
+score_c_reviews_plot <- ggplot(visualization_df, aes(x=imdb_score, y=num_critic_for_reviews)) + 
+  geom_point(color='darkblue')
+score_duration_plot <- ggplot(visualization_df, aes(x=imdb_score, y=duration)) + 
+  geom_point(color='darkblue')
+score_voted_users_plot <- ggplot(visualization_df, aes(x=imdb_score, y=num_voted_users)) + 
+  geom_point(color='darkblue')
+score_u_reviews_plot <- ggplot(visualization_df, aes(x=imdb_score, y=num_user_for_reviews)) + 
+  geom_point(color='darkblue')
+quartz()
+grid.arrange(score_c_reviews_plot,score_duration_plot,score_voted_users_plot,score_u_reviews_plot)
+# observation: Imdb score directly proportional to these predictors.
+
+```
+
+
+```{r Data Preparation: Transformations}
+transformed_movie_df <- complete_movie_df
+
+# Imdb_score is left-skewed.
+# num_critic_for_reviews is right skewed.
+# duration is right skewed.
+# num_voted_users is extremely right skewed.
+# num_user_for_reviews is also extremely right skewed.
+
+par(mfrow = c(2,2))
+hist(complete_movie_df$num_critic_for_reviews,xlab = "Number of Critic Reviews", ylab="Frequency", main = "Before Transformation")
+hist(complete_movie_df$duration,xlab = "Duration", ylab="Frequency", main = "Before Transformation")
+hist(complete_movie_df$num_voted_users,xlab = "Number of Voted users", ylab="Frequency", main = "Before Transformation")
+hist(complete_movie_df$num_user_for_reviews,xlab = "Number of Users for Reviews", ylab="Frequency", main = "Before Transformation")
+dev.off()
+
+imdb_score <- transformed_movie_df[,14]
+transformed_movie_df <- transformed_movie_df[,-14]
+transformed_movie_df$imdb_score <- imdb_score
+
+log_transformation <- function(df){
+  for (i in 1:ncol(df)) {
+    selected_df  <- df[,i]
+    x <- log(selected_df)
+    df[,i] <- x
+  }
+  
+}
+log_transformation(transformed_movie_df[, 1:15])
+```
+
+```{r Data Preparation: Data Splitting}
+#Random split
+indexes = sample(1:nrow(transformed_movie_df), size=0.2*nrow(transformed_movie_df))
+test <- transformed_movie_df[indexes,]
+train <- transformed_movie_df[-indexes,]
+```
+
+```{r Modeling:Linear Regression}
+train_LM <- train
+test_LM <- test
+#fit1 we are including all the variables, and slowly depending on the significance level we eliminate the variabless.We'll check for multicollinearity
+#colnames(train_LM)
+fit_lm <- lm(imdb_score~., data=train_LM)
+Rsq = summary(fit_lm)$r.squared
+vif = 1/(1 - Rsq)
+vif
+
+pr_lm <- predict(fit_lm, test_LM)
+MSE_lm <- sum((test_LM$imdb_score - pr_lm)^2)/nrow(test_LM)
+MSE_lm
+
+RMSE_LM <- sqrt(mean((pr_lm-test_LM$imdb_score)^2))
+RMSE_LM
+
+MAE_LM <- mean(abs(pr_lm-test_LM$imdb_score))
+MAE_LM
+
+
+#------FIT2-------
+#Rejected budjet and director facebook likes based on significance level. Mainly rejected variabls because of significance and multicollinearity.
+fit2_lm <- lm(imdb_score~ num_critic_for_reviews+duration+gross+num_voted_users+facenumber_in_poster+num_user_for_reviews+title_year+movie_facebook_likes, data=train_LM)
+summary(fit2_lm)
+
+pr2_lm <- predict(fit2_lm, test_LM)
+MSE2_lm <- sum((test_LM$imdb_score - pr2_lm)^2)/nrow(test_LM)
+
+RMSE2_LM <- sqrt(mean((pr2_lm-test_LM$imdb_score)^2))
+RMSE2_LM
+
+MAE2_LM <- mean(abs(pr2_lm-test_LM$imdb_score))
+MAE2_LM
+
+
+par(mar = c(4, 4, 2, 2), mfrow = c(1, 2)) #optional
+plot(fit2_lm, which = c(1, 2))
+dev.off()
+```
+
+####-----------------------------------------------------------------------------------------
+
+```{r Modeling: Model Selection}
+#df_E_Boosting_Algo <- transformed_movie_df
+
+#########C5.0
+#########Stochastic Gradient Boosting
+
+# Example of Boosting Algorithms
+control <- trainControl(method="repeatedcv", number=10, repeats=3)
+seed <- 8
+metric <- "RMSE"
+
+
+# Linear Discriminant Analysis
+#set.seed(seed)
+#system.time(fit.lda <- train(imdb_score~., data=train, method="lda", metric=metric, #preProc=c("center", "scale"), trControl=control))
+
+# Logistic Regression
+#set.seed(seed)
+#cl_1 <- makeCluster(4, type = "SOCK") #Using clusters to speed up through parallel processing
+#registerDoParallel(cl_1)
+#system.time(fit.glm <- train(imdb_score~., data=train, method="glm", metric=metric, trControl=control)) 
+#stopCluster(cl_1)
+#summary(fit.glm)
+# GLMNET
+set.seed(seed)
+srchGrd <-expand.grid(.alpha=0.1111111111, .lambda=0.0009142857143)
+cl_2 <- makeCluster(4, type = "SOCK") #Using clusters to speed up through parallel processing
+registerDoParallel(cl_2)
+system.time(fit.glmnet <- train(imdb_score~., data=train, method="glmnet", metric=metric, preProc=c("center", "scale"), trControl=control,tuneGrid = srchGrd))
+stopCluster(cl_2)
+summary(fit.glmnet)
+# SVM Radial
+set.seed(seed)
+cl_3 <- makeCluster(4, type = "SOCK") #Using clusters to speed up through parallel processing
+registerDoParallel(cl_3)
+system.time(fit.svmRadial <- train(imdb_score~., data=train, method="svmRadial", metric=metric, preProc=c("center", "scale"), trControl=control, fit=FALSE))
+stopCluster(cl_3)
+
+# kNN
+set.seed(seed)
+cl_4 <- makeCluster(4, type = "SOCK") #Using clusters to speed up through parallel processing
+registerDoParallel(cl_4)
+system.time(fit.knn <- train(imdb_score~., data=train, method="knn", metric=metric, preProc=c("center", "scale"), trControl=control))
+stopCluster(cl_4)
+
+# Naive Bayes
+#set.seed(seed)
+#cl_5 <- makeCluster(4, type = "SOCK") #Using clusters to speed up through parallel processing
+#registerDoParallel(cl_5)
+#system.time(fit.nb <- train(imdb_score~., data=train, method="nb", metric=metric, #trControl=control))
+#stopCluster(cl_5)
+
+# CART
+set.seed(seed)
+cl_6 <- makeCluster(4, type = "SOCK") #Using clusters to speed up through parallel processing
+registerDoParallel(cl_6)
+system.time(fit.cart <- train(imdb_score~., data=train, method="rpart", metric=metric, trControl=control))
+stopCluster(cl_6)
+
+# C5.0
+#set.seed(seed)
+#cl_7 <- makeCluster(4, type = "SOCK") #Using clusters to speed up through parallel processing
+#registerDoParallel(cl_7)
+#system.time(fit.c50 <- train(imdb_score~., data=train, method="C5.0", metric=metric, #trControl=control))
+#stopCluster(cl_7)
+
+# Bagged CART
+set.seed(seed)
+cl_8 <- makeCluster(4, type = "SOCK") #Using clusters to speed up through parallel processing
+registerDoParallel(cl_8)
+system.time(fit.treebag <- train(imdb_score~., data=train, method="treebag", metric=metric, trControl=control))
+stopCluster(cl_8)
+
+# Random Forest
+set.seed(seed)
+cl_9 <- makeCluster(4, type = "SOCK") #Using clusters to speed up through parallel processing
+registerDoParallel(cl_9)
+system.time(fit.rf <- train(imdb_score~., data=train, method="rf", metric=metric, trControl=control))
+stopCluster(cl_9)
+
+
+# Stochastic Gradient Boosting (Generalized Boosted Modeling)
+set.seed(seed)
+cl_10 <- makeCluster(4, type = "SOCK") #Using clusters to speed up through parallel processing
+registerDoParallel(cl_10)
+system.time(fit.gbm <- train(imdb_score~., data=train, method="gbm", metric=metric, trControl=control, verbose=FALSE))
+stopCluster(cl_10)
+
+# Neural Networks
+cl_15 <- makeCluster(4, type = "SOCK") #Using clusters to speed up through parallel processing
+registerDoParallel(cl_15)
+system.time(fit.nn <- train(imdb_score~., data=train, method="nnet", metric=metric, trControl=control,linout=TRUE, trace = FALSE, preProc = c("center", "scale")))
+stopCluster(cl_15)
+
+results <- resamples(list( glmnet=fit.glmnet,
+	svm=fit.svmRadial, knn=fit.knn, cart=fit.cart, 
+	bagging=fit.treebag, rf=fit.rf, gbm=fit.gbm, NeuralNet = fit.nn))
+# Table comparison
+summary(results)
+
+# boxplot comparison
+bwplot(results)
+# Dot-plot comparison
+dotplot(results)
+
+
+
+```
+
+```{r Modeling:Ensemble Model}
+library(caretEnsemble)
+# Example of Stacking algorithms
+# create submodels
+control_ensemble <- trainControl(method="repeatedcv", number=10, repeats=3)
+algorithmList <- c('rf', 'gbm', 'svmRadial')
+set.seed(seed)
+cl_11 <- makeCluster(4, type = "SOCK") #Using clusters to speed up through parallel processing
+registerDoParallel(cl_11)
+system.time(models_ensemble <- caretList(imdb_score~., data=train, trControl=control_ensemble, methodList=algorithmList,preProc=c("center", "scale")))
+stopCluster(cl_11)
+results_ensemble <- resamples(models_ensemble)
+summary(results_ensemble)
+final_rating <- as.data.frame(predict(models_ensemble, newdata=test))
+head(final_rating)
+
+stackControl <- trainControl(method="repeatedcv", number=10, repeats=3, savePredictions="final")
+set.seed(seed)
+
+cl_12 <- makeCluster(4, type = "SOCK") #Using clusters to speed up through parallel processing
+registerDoParallel(cl_12)
+system.time(stack.rf <- caretStack(models_ensemble, method="rf", verbose=FALSE, tuneLength=10,metric="RMSE", trControl=stackControl))
+stopCluster(cl_12)
+
+final_model_prediction_RF <- predict(stack.rf,newdata=test)
+
+RMSE_RF_FINAL <- sqrt(mean((final_model_prediction_RF-test$imdb_score)^2))
+
+MAE_RF_FINAL <- mean(abs(final_model_prediction_RF-test$imdb_score))
+
+#all_predictions <- gather(as.dataframe(final_model_prediction),key = model,value = predictions)
+#windows()
+#ggplot(data = all_predictions, aes(x=actual,y=predictions))+geom_point(colour="blue")+geom_abline(intercept = 0, slope = 1, colour = "red") +geom_vline(xintercept = 23, colour ="green", linetype = "dashed")+facet_wrap(~model,ncol = 2)+coord_cartesian(xlim = c(0,11),ylim = c(0,11))+ggtitle("Modelwise, Predicted vs Actual Graphs")
+
+
+
+
+
+#mtry  RMSE          Rsquared    
+#  2     0.6345856871  0.6402799019
+#  3     0.6354429984  0.6392616473
+#  5     0.6379347732  0.6365128359
+
+#RMSE was used to select the optimal model using  the smallest value.
+#The final value used for the model was mtry = 2.
+
+#mtry = 8
+
+cl_13 <- makeCluster(4, type = "SOCK") #Using clusters to speed up through parallel processing
+registerDoParallel(cl_13)
+system.time(stack.gbm <- caretStack(models_ensemble, method="gbm", metric="RMSE", trControl=stackControl))
+stopCluster(cl_13)
+print(stack.gbm)
+#The final values used for the model were n.trees = 150, interaction.depth = 3, shrinkage = 0.1 and n.minobsinnode = 10.
+#3                  150      0.6636518942  0.6063062565
+final_model_prediction_gbm <- predict(stack.gbm,newdata=test)
+
+RMSE_GBM_FINAL <- sqrt(mean((final_model_prediction_gbm-test$imdb_score)^2))
+
+MAE_GBM_FINAL <- mean(abs(final_model_prediction_gbm-test$imdb_score))
+
+
+#n.trees = 150, interaction.depth = 3, shrinkage = 0.1 and n.minobsinnode = 10.
+
+cl_14 <- makeCluster(4, type = "SOCK") #Using clusters to speed up through parallel processing
+registerDoParallel(cl_14)
+system.time(stack.nnet <- caretStack(models_ensemble, method="nnet", metric="RMSE", trControl=stackControl))
+stopCluster(cl_14)
+print(stack.nnet)
+#RMSE          Rsquared    
+#  0.6931390927  0.5710912504
+
+cl_16 <- makeCluster(4, type = "SOCK") #Using clusters to speed up through parallel processing
+registerDoParallel(cl_16)
+system.time(stack.svm <- caretStack(models_ensemble, method="svmRadial", metric="RMSE", trControl=stackControl))
+stopCluster(cl_16)
+print(stack.svm)
+
+final_model_prediction_svm <- predict(stack.svm,newdata=test)
+
+RMSE_svm_FINAL <- sqrt(mean((final_model_prediction_svm-test$imdb_score)^2))
+
+MAE_svm_FINAL <- mean(abs(final_model_prediction_svm-test$imdb_score))
+# C     RMSE          Rsquared    
+#  0.25  0.6647263675  0.6081484014
+#  0.50  0.6601990030  0.6128811509
+#  1.00  0.6573582310  0.6159777339
+#The final values used for the model were sigma = 0.5237341775 and C = 1.
+#stack.knn$models
+```
+
+
+```{r}
+#####----------------------GBM Tuning-----------------------------------##################
+
+
+set.seed(seed)
+gbmGrid <-  expand.grid(interaction.depth = 3, 
+                        n.trees = 150, 
+                        shrinkage = 0.1,
+                        n.minobsinnode = 10)
+control_gbm <- trainControl(method="repeatedcv", number=10, repeats=3)
+cl_16 <- makeCluster(4, type = "SOCK") #Using clusters to speed up through parallel processing
+registerDoParallel(cl_16)
+system.time(fit.gbm1 <- train(imdb_score~., data=train, method="gbm", metric=metric, trControl=control_gbm, verbose=FALSE,tuneGrid = gbmGrid))
+stopCluster(cl_16)
+final_model_prediction_gbm1 <- predict(fit.gbm,newdata=test)
+
+RMSE_gbm1_FINAL <- sqrt(mean((final_model_prediction_gbm1-test$imdb_score)^2))
+
+MAE_gbm1_FINAL <- mean(abs(final_model_prediction_gbm1-test$imdb_score))
+
+trellis.par.set(caretTheme())
+plot(fit.gbm1)
+###########_-------------------------------------##################
+```
+
+
+```{r Result}
+# Before staked
+
+#GBM <-  0.7051026  0.5558759 <- The final values used for the model were n.trees = 150, interaction.depth = 3, shrinkage = 0.1 and n.minobsinnode = 10.
+#RF <- 0.6933121  0.5759998   <- mtry=8
+#SVM <- 0.7450903  0.5102352  <- sigma = 0.1545986 and C = 1
+
+# After Stacked Algorithm
+#GBM <- 0.6741655  0.5926593
+#RF <- 0.6858708  0.5799645
+#SVM <- 0.6757145  0.5932901 <- sigma = 1.393034 and C = 1
+
+#Predicted RMSE
+#GBM 0.6997279
+#RF  0.7359729
+#SVM 0.7087499
+
+# SVM Performed better after applying stacked algorithm 
+
+all_predictions <- data.frame(actual = test$imdb_score,RandomForest=final_model_prediction_RF,GradientBoosting=final_model_prediction_gbm,SVM=final_model_prediction_svm )
+
+all_predictions <- gather(all_predictions,key = model,value = predictions,2:4)
+
+quartz()
+ggplot(data = all_predictions, aes(x=actual,y=predictions))+geom_point(colour="blue")+geom_abline(intercept = 0, slope = 1, colour = "red") +geom_vline(xintercept = 23, colour ="green", linetype = "dashed")+facet_wrap(~model,ncol = 2)+coord_cartesian(xlim = c(0,11),ylim = c(0,11))+ggtitle("Modelwise, Predicted vs Actual Graphs")
+
+```
+
+
+```{r Variable Importance}
+#####---------------------------------------------------------##################
+
+plot(varImp(fit.gbm))
+varImp(fit.svmRadial)
+```
+
